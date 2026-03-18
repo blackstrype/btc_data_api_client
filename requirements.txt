@@ -1,2 +1,4 @@
 websockets
 certifi
+stomp.py
+python-dotenv

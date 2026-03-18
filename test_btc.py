@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, patch
 from live_btc import stream_btc_with_heartbeat
 from read_trades import analyze_trades
 from data_storage import FileStorage
+from artemis_stomp_producer import ArtemisProducer
 
 class TestBTCSystem(unittest.IsolatedAsyncioTestCase):
     
@@ -68,6 +69,9 @@ class TestBTCSystem(unittest.IsolatedAsyncioTestCase):
         # Mock Storage
         mock_storage = AsyncMock()
         
+        # Mock Producer
+        mock_producer = AsyncMock()
+        
         # Mock WebSocket
         mock_websocket = AsyncMock()
         
@@ -95,7 +99,7 @@ class TestBTCSystem(unittest.IsolatedAsyncioTestCase):
             # Since stream_btc_with_heartbeat will catch the CancelledError, it won't raise it back to us
             f = io.StringIO()
             with redirect_stdout(f):
-                await stream_btc_with_heartbeat(mock_storage)
+                await stream_btc_with_heartbeat(mock_storage, mock_producer)
             output = f.getvalue()
         
         # Verify ticker was saved
@@ -103,6 +107,9 @@ class TestBTCSystem(unittest.IsolatedAsyncioTestCase):
         saved_data = mock_storage.save.call_args[0][0]
         self.assertEqual(saved_data["type"], "ticker")
         self.assertEqual(saved_data["price"], "50000.00")
+
+        # Verify ticker was sent to producer
+        mock_producer.send_trade.assert_called_once_with(saved_data)
         
         # Verify heartbeat was processed but not saved
         self.assertIn("💓 HEARTBEAT", output)
@@ -120,6 +127,27 @@ class TestBTCSystem(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(len(lines), 1)
         self.assertEqual(json.loads(lines[0]), data)
+
+    async def test_artemis_producer(self):
+        """Verifies that ArtemisProducer correctly sends data to ActiveMQ."""
+        with patch("stomp.Connection") as mock_stomp_conn_class:
+            mock_conn = mock_stomp_conn_class.return_value
+            
+            # Instantiate producer (should call connect)
+            producer = ArtemisProducer()
+            
+            mock_stomp_conn_class.assert_called_once()
+            mock_conn.connect.assert_called_once()
+            
+            # Send a trade
+            trade_data = {"price": "50000.00", "last_size": "0.1", "type": "ticker"}
+            await producer.send_trade(trade_data)
+            
+            # Verify send was called
+            mock_conn.send.assert_called_once()
+            args, kwargs = mock_conn.send.call_args
+            self.assertEqual(kwargs['destination'], 'trades.btc')
+            self.assertIn('"price": "50000.00"', kwargs['body'])
 
 if __name__ == "__main__":
     unittest.main()

@@ -5,8 +5,9 @@ import ssl
 import certifi
 from datetime import datetime
 from data_storage import DataStorage, FileStorage
+from artemis_stomp_producer import ArtemisProducer
 
-async def stream_btc_with_heartbeat(storage: DataStorage):
+async def stream_btc_with_heartbeat(storage: DataStorage, producer: ArtemisProducer):
     url = "wss://ws-feed.exchange.coinbase.com"
     ssl_context = ssl.create_default_context(cafile=certifi.where())
     
@@ -32,6 +33,7 @@ async def stream_btc_with_heartbeat(storage: DataStorage):
                 if msg_type == "ticker":
                     print(f"📈 TRADE: €{data.get('price')} | Vol: {data.get('last_size')}")
                     await storage.save(data)
+                    await producer.send_trade(data)
                 
                 elif msg_type == "heartbeat":
                     # This tells us the connection is alive even if no trades happen
@@ -46,8 +48,9 @@ async def stream_btc_with_heartbeat(storage: DataStorage):
 
 if __name__ == "__main__":
     file_storage = FileStorage("btc_history.jsonl")
+    artemis_producer = ArtemisProducer()
 
     try:
-        asyncio.run(stream_btc_with_heartbeat(file_storage))
+        asyncio.run(stream_btc_with_heartbeat(storage=file_storage, producer=artemis_producer))
     except KeyboardInterrupt:
         pass # Clean exit on Ctrl+C

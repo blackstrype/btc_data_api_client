@@ -55,6 +55,8 @@ To configure the connection, set the following environment variables (e.g., in a
 ---
 
 ### 🏛️ Architecture Details
+![BTC Live Messaging Pipeline](BTCLiveMessagingPipeline.drawio.png)
+
 The project follows a decoupled approach using the **Strategy Pattern** for data storage:
 * **The Contract (`DataStorage`)**: An abstract base class that defines how data *should* be saved.
 * **The Implementation (`FileStorage`)**: A concrete class that saves data to a `.jsonl` file. 
